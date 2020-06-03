@@ -296,7 +296,7 @@ def main(wf):
         wf.add_item('An update is available!',
                     autocomplete='workflow:update',
                     valid=False,
-                    icon=helpers.get_icon(wf, 'cloud-download'))
+                    icon='icons/cloud-download-dark.png')
 
     # extract query
     query = wf.args[0] if len(wf.args) else None # if there's an argument(s) `query` is the first one. Otherwise it's `None`
