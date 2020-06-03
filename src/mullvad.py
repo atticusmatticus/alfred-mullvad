@@ -48,9 +48,13 @@ def get_version():
 
 def connection_status():
     for status in get_connection():
+#        print 'status:', status
         stat = str(status.split()[2])
+#        print 'stat:', stat
         if stat == 'Connected':
             countryString, cityString = get_country_city()
+#            print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
+#            print ' '.join(status.split()[4:])+'. Select to Disconnect.'
             wf.add_item('{} to: {} {}'.format(stat, cityString, countryString).decode('utf8'),
                         subtitle=' '.join(status.split()[4:])+'. Select to Disconnect.',
                         arg='/usr/local/bin/mullvad disconnect',
@@ -72,16 +76,21 @@ def connection_status():
 
 def get_country_city():
     countryCodeSearch = '({})'.format(get_protocol()[-1])
+#    print countryCodeSearch
     cityCodeSearch = '({})'.format(get_protocol()[-2][0:3])
+#    print cityCodeSearch
     countries = wf.cached_data('mullvad_country_list',
                                get_country_list,
                                max_age=432000)
+#    print countries
     index = [i for i,s in enumerate(countries) if countryCodeSearch in s][0]
     relayList = wf.cached_data('mullvad_relay_list',
                                get_relay_list,
                                max_age=432000)
     countryString = countries[index].split()[:-1][0]
+#    print countryString
     cityString = ' '.join([city[0] for city in relayList[index][1:] if cityCodeSearch in city[0]][0].split()[:-1])
+#    print cityString
     return countryString, cityString
 
 
