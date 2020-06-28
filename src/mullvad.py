@@ -39,7 +39,7 @@ def get_lan():
 
 
 def get_kill_switch():
-    return execute(['mullvad', 'block-when-disconnected', 'get']).splitlines()
+    return execute(['mullvad', 'always-require-vpn', 'get']).splitlines()
 
 
 def get_version():
@@ -106,7 +106,7 @@ def set_kill_switch():
             killStat = ['Disabled', 'on', 'red']
         wf.add_item('Kill switch: ' + killStat[0],
                     subtitle=status + '. Select to switch',
-                    arg='/usr/local/bin/mullvad block-when-disconnected set {}'.format(killStat[1]),
+                    arg='/usr/local/bin/mullvad always-require-vpn set {}'.format(killStat[1]),
                     valid=True,
                     icon='icons/skull_{}.png'.format(killStat[2]))
 
@@ -302,9 +302,13 @@ def main(wf):
     query = wf.args[0] if len(wf.args) else None # if there's an argument(s) `query` is the first one. Otherwise it's `None`
 
     if not query:
-        if get_version()[1] == 'false':
+        if wf.cached_data('mullvad_version',
+                          get_version,
+                          max_age=86400)[1] == 'false':
             update_mullvad()
-        if get_version()[0] == 'false':
+        if wf.cached_data('mullvad_version',
+                          get_version,
+                          max_age=86400)[0] == 'false':
             unsupported_mullvad()
         if wf.cached_data('mullvad_account',
                           get_account,
