@@ -322,7 +322,7 @@ def main(wf):
     if query and query.startswith('Check'):
         wf.add_item('Check',
                     subtitle='Check security of connection',
-                    arg='open https://mullvad.net/check/',
+                    arg='open https://mullvad.net/en/check/',
                     valid=True,
                     icon='icons/mullvad_yellow.png')
 
