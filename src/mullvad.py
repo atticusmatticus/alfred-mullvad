@@ -319,10 +319,10 @@ def main(wf):
         protocol_status()
         set_lan()
 
-    if query and query.startswith('Am I Mullvad?'):
-        wf.add_item('Am I Mullvad?',
+    if query and query.startswith('Check'):
+        wf.add_item('Check',
                     subtitle='Check security of connection',
-                    arg='open https://am.i.mullvad.net',
+                    arg='open https://mullvad.net/check/',
                     valid=True,
                     icon='icons/mullvad_yellow.png')
 
