@@ -56,7 +56,7 @@ def connection_status():
 #            print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
 #            print ' '.join(status.split()[4:])+'. Select to Disconnect.'
             wf.add_item('{} to: {} {}'.format(stat, cityString, countryString).decode('utf8'),
-                        subtitle=' '.join(status.split()[4:])+'. Select to Disconnect.',
+                        subtitle=' '.join(status.split()[4:])+'. Select to Disconnect. Type "Relay" to change.',
                         arg='/usr/local/bin/mullvad disconnect',
                         valid=True,
                         icon='icons/mullvad_green.png')
@@ -75,14 +75,14 @@ def connection_status():
 
 
 def get_country_city():
-    countryCodeSearch = '({})'.format(get_protocol()[-1])
-#    print countryCodeSearch
-    cityCodeSearch = '({})'.format(get_protocol()[-2][0:3])
-#    print cityCodeSearch
+    countryCodeSearch = '({})'.format(get_protocol()[9])
+#    print 'countryCodeSearch', countryCodeSearch
+    cityCodeSearch = '({})'.format(get_protocol()[8][0:3])
+#    print 'cityCodeSearch', cityCodeSearch
     countries = wf.cached_data('mullvad_country_list',
                                get_country_list,
                                max_age=432000)
-#    print countries
+#    print 'countries', countries
     index = [i for i,s in enumerate(countries) if countryCodeSearch in s][0]
     relayList = wf.cached_data('mullvad_relay_list',
                                get_relay_list,
@@ -318,6 +318,14 @@ def main(wf):
         set_kill_switch()
         protocol_status()
         set_lan()
+        for action in mullvad_actions.ACTIONS:
+            if action['name'] in ['relay', 'Check']:
+                wf.add_item(action['name'], action['description'],
+                            uid=action['name'],
+                            autocomplete=action['autocomplete'],
+                            arg=action['arg'],
+                            valid=action['valid'],
+                            icon=action['icon'])
 
     if query and query.startswith('Check'):
         wf.add_item('Check',
