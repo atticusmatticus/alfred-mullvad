@@ -8,9 +8,9 @@ ACTIONS = [
         'valid': False
     },
     {
-        'name': 'Check',
+        'name': 'check',
         'description': 'Check security of connection',
-        'autocomplete': 'Check ',
+        'autocomplete': 'check ',
         'arg': '',
         'icon': 'icons/mullvad_yellow.png',
         'valid': False
