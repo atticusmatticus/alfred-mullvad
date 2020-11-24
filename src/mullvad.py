@@ -98,6 +98,13 @@ def get_connection():
     return execute(['mullvad', 'status']).splitlines()
 
 
+def check_connection():
+    wf.add_item('check',
+                subtitle='Check security of connection',
+                arg='open https://mullvad.net/en/check/',
+                valid=True,
+                icon='icons/mullvad_yellow.png')
+
 def set_kill_switch():
     for status in get_kill_switch():
         if status == 'Network traffic will be blocked when the VPN is disconnected':
@@ -318,8 +325,9 @@ def main(wf):
         set_kill_switch()
         protocol_status()
         set_lan()
+        check_connection()
         for action in mullvad_actions.ACTIONS:
-            if action['name'] in ['relay', 'Check']:
+            if action['name'] in ['relay']:
                 wf.add_item(action['name'], action['description'],
                             uid=action['name'],
                             autocomplete=action['autocomplete'],
@@ -327,12 +335,8 @@ def main(wf):
                             valid=action['valid'],
                             icon=action['icon'])
 
-    if query and query.startswith('Check'):
-        wf.add_item('Check',
-                    subtitle='Check security of connection',
-                    arg='open https://mullvad.net/en/check/',
-                    valid=True,
-                    icon='icons/mullvad_yellow.png')
+    if query and query.startswith('check'):
+        check_connection()
 
     elif query and any(query.startswith(x) for x in ['kill-switch', 'block-when-disconnected']):
         set_kill_switch()
