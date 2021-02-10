@@ -6,7 +6,7 @@ import sys
 import subprocess
 from datetime import datetime
 
-from workflow import Workflow3, MATCH_SUBSTRING
+from workflow import Workflow, MATCH_SUBSTRING
 from workflow.background import run_in_background
 
 import mullvad_actions
@@ -421,7 +421,7 @@ def main(wf):
         set_lan()
         check_connection()
         for action in mullvad_actions.ACTIONS:
-            if action['name'] in ['relay']:
+            if action['name'] in ['relay', 'reconnect', 'auto-connect', 'account']:
                 wf.add_item(action['name'], action['description'],
                             uid=action['name'],
                             autocomplete=action['autocomplete'],
@@ -505,5 +505,5 @@ def main(wf):
 #############################
 
 if __name__ == '__main__':
-    wf = Workflow3(update_settings={'github_slug': GITHUB_SLUG})
+    wf = Workflow(update_settings={'github_slug': GITHUB_SLUG})
     sys.exit(wf.run(main))

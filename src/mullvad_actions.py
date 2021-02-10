@@ -24,7 +24,7 @@ ACTIONS = [
         'valid': False
     },
     {
-        'name': 'Reconnect',
+        'name': 'reconnect',
         'description': 'Reconnect to VPN',
         'autocomplete': 'reconnect ',
         'arg': '',
