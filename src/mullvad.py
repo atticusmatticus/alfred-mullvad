@@ -6,7 +6,7 @@ import sys
 import subprocess
 from datetime import datetime
 
-from workflow import Workflow, MATCH_SUBSTRING
+from workflow import Workflow3, MATCH_SUBSTRING
 from workflow.background import run_in_background
 
 import mullvad_actions
@@ -19,6 +19,14 @@ GITHUB_SLUG = 'atticusmatticus/alfred-mullvad'
 #############################
 
 def execute(cmdList):
+    """ Execute a terminal command from list of arguments
+
+    Arguments:
+    cmdList -- command line command (list of strings)
+
+    Returns:
+    cmd/err -- output of terminal command (tuple of strings)
+    """
     newEnv = os.environ.copy()
     newEnv['PATH'] = '/usr/local/bin:%s' % newEnv['PATH'] # prepend the path to `mullvad` executable to the system path
     cmd, err = subprocess.Popen(cmdList,
@@ -31,32 +39,84 @@ def execute(cmdList):
 
 
 def get_auto_connect():
+    """ Get Mullvad Auto-Connect Status
+
+    Arguments:
+    None
+
+    Returns:
+    String of status -- "Autoconnect: on/off"
+    """
     return execute(['mullvad', 'auto-connect', 'get']).splitlines()
 
 
 def get_lan():
+    """ Get Mullvad Local Network Sharing Status
+
+    Arguments:
+    None
+
+    Returns:
+    String of status -- "Local network sharing setting: allow/block"
+    """
     return execute(['mullvad', 'lan', 'get']).splitlines()
 
 
 def get_kill_switch():
+    """ Get Mullvad Kill-Switch Status
+
+    Arguments:
+    None
+
+    Returns:
+    String of status -- "Network traffic will be allowed/blocked when the VPN is disconnected"
+    """
     return execute(['mullvad', 'always-require-vpn', 'get']).splitlines()
 
 
 def get_version():
-    return [execute(['mullvad', 'version']).splitlines()[1].split()[2], execute(['mullvad', 'version']).splitlines()[2].split()[4]] # version [supported, up-to-date]
+    """ Get Mullvad Version
+
+    Arguments:
+    None
+
+    Returns:
+    List of strings -- [mullvad supported:"true/false", ]
+    """
+    # TODO: simplify this return segment
+    mullVersion = execute(['mullvad', 'version'])
+    # print mullVersion
+    supported = mullVersion.splitlines()[1].split()[2]
+    if supported == 'true':
+        supported = True
+    elif supported == 'false':
+        supported = False
+    # print supported
+    currentVersion = mullVersion.splitlines()[0].split(':')[1].strip()
+    # print currentVersion
+    latestVersion = mullVersion.splitlines()[3].split(':')[1].strip()
+    # print latestVersion
+    # print currentVersion==latestVersion
+    return [supported, currentVersion==latestVersion]
 
 
 def connection_status():
+    """ Add workflow item of current connection status
+    Arguments:
+    None
+    Returns:
+    Item -- Connected/Disconnected/Blocked
+    """
     for status in get_connection():
-#        print 'status:', status
+        # print 'status:', status
         stat = str(status.split()[2])
-#        print 'stat:', stat
+        # print 'stat:', stat
         if stat == 'Connected':
             countryString, cityString = get_country_city()
-#            print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
-#            print ' '.join(status.split()[4:])+'. Select to Disconnect.'
+            # print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
+            # print ' '.join(status.split()[4:])+'. Select to Disconnect.'
             wf.add_item('{} to: {} {}'.format(stat, cityString, countryString).decode('utf8'),
-                        subtitle=' '.join(status.split()[4:])+'. Select to Disconnect. Type "Relay" to change.',
+                        subtitle=' '.join(status.split()[4:])+'. Select to Disconnect. Type "relay" to change.',
                         arg='/usr/local/bin/mullvad disconnect',
                         valid=True,
                         icon='icons/mullvad_green.png')
@@ -75,26 +135,39 @@ def connection_status():
 
 
 def get_country_city():
-    countryCodeSearch = '({})'.format(get_protocol()[9])
-#    print 'countryCodeSearch', countryCodeSearch
-    cityCodeSearch = '({})'.format(get_protocol()[8][0:3])
-#    print 'cityCodeSearch', cityCodeSearch
+    """ Get the current country and city relay information
+    :returns countryString: 
+    """
+    # TODO: make this work for OpenVPN as well as Wireguard
+    getProt = get_protocol()
+    # print 'getProt: {}'.format(getProt)
+    sep = getProt.index(',')
+    # print 'sep: {}'.format(sep)
+    countryCodeSearch = '({})'.format(getProt[sep+2:sep+4])
+    # print 'DEBUG: countryCodeSearch', countryCodeSearch #debug
+    cityCodeSearch = '({})'.format(getProt[sep-3:sep])
+    # cityCodeSearch = '({})'.format(get_protocol()[8][0:3])
+    # print 'DEBUG: cityCodeSearch', cityCodeSearch
     countries = wf.cached_data('mullvad_country_list',
                                get_country_list,
                                max_age=432000)
-#    print 'countries', countries
+    # print 'DEBUG: countries', countries #debug
     index = [i for i,s in enumerate(countries) if countryCodeSearch in s][0]
     relayList = wf.cached_data('mullvad_relay_list',
                                get_relay_list,
                                max_age=432000)
     countryString = countries[index].split()[:-1][0]
-#    print countryString
+    # print countryString #debug
     cityString = ' '.join([city[0] for city in relayList[index][1:] if cityCodeSearch in city[0]][0].split()[:-1])
-#    print cityString
+    # print cityString #debug
     return countryString, cityString
 
 
 def get_connection():
+    """ VPN connection tunnel status
+    :returns: sentence of tunnel status
+    :type returns: tuple of a single sentence string
+    """
     return execute(['mullvad', 'status']).splitlines()
 
 
@@ -104,6 +177,7 @@ def check_connection():
                 arg='open https://mullvad.net/en/check/',
                 valid=True,
                 icon='icons/mullvad_yellow.png')
+
 
 def set_kill_switch():
     for status in get_kill_switch():
@@ -119,11 +193,11 @@ def set_kill_switch():
 
 
 def get_protocol():
-    return execute(['mullvad','relay','get']).split()
+    return execute(['mullvad','relay','get'])
 
 
 def protocol_status():
-    status = get_protocol()[2]
+    status = get_connection()[0].split()[4]
     wf.add_item('Tunnel-protocol: {}'.format(status),
                 subtitle='Change tunnel-protocol',
                 autocomplete='protocol',
@@ -206,25 +280,39 @@ def add_time_account():
 
 
 def update_relay_list():
-    execute(['mullvad', 'relay', 'update']) #TODO add this to its own subroutine that gets run in the background
+    # TODO add this to its own subroutine that gets run in the background
+    execute(['mullvad', 'relay', 'update'])
 
 
 def list_relay_countries(wf, query):
+    """ List countries with servers
+    Arguments:
+    query -- "relay"
+    """
+    # TODO: does `query` need to be here?
+    # print query
     for country in filter_relay_countries(wf, query):
         countryName = country.split(' (')[0]
         countryCode = country.split('(')[1].split(')')[0]
         wf.add_item(country,
                     subtitle='List cities in {}'.format(countryName),
-                    valid=False, # TABing and RETURN have the same effect. take you to city selection
+                    valid=False, # TABing and RETURN have the same effect, take you to city selection
                     autocomplete='country:{} '.format(countryCode),
-                    icon='icons/chevron-right-dark.png') #TODO lock icon? or maybe just chevron
+                    icon='icons/chevron-right-dark.png') # TODO lock icon, or maybe just chevron
 
 
 def filter_relay_countries(wf, query):
+    """ List contries based on fuzzy match of query
+    Returns:
+    List of countries as strings
+    """
+    # print query
     countries = wf.cached_data('mullvad_country_list',
                                get_country_list,
                                max_age=432000)
+    # print query
     queryFilter = query.split()
+    # print query, queryFilter
     if len(queryFilter) > 1:
         return wf.filter(queryFilter[1], countries, match_on=MATCH_SUBSTRING)
     return countries
@@ -258,6 +346,12 @@ def get_relay_list():
 
 
 def list_relay_cities(wf, query):
+    """ List cities of country
+    Argument:
+    query -- country:`countryCode` where `countryCode` is a two letter abbreviation of a country from list_relay_countries()
+    Returns:
+    List of Items of cities
+    """
     countryCode = query.split(':')[1].split()[0]
     for city in filter_relay_cities(wf, countryCode, query):
         cityCode = city.split('(')[1].split(')')[0]
@@ -308,14 +402,14 @@ def main(wf):
     # extract query
     query = wf.args[0] if len(wf.args) else None # if there's an argument(s) `query` is the first one. Otherwise it's `None`
 
-    if not query:
+    if not query: # starting screen of information.
         if wf.cached_data('mullvad_version',
                           get_version,
-                          max_age=86400)[1] == 'false':
+                          max_age=86400)[1] == False:
             update_mullvad()
         if wf.cached_data('mullvad_version',
                           get_version,
-                          max_age=86400)[0] == 'false':
+                          max_age=86400)[0] == False:
             unsupported_mullvad()
         if wf.cached_data('mullvad_account',
                           get_account,
@@ -411,5 +505,5 @@ def main(wf):
 #############################
 
 if __name__ == '__main__':
-    wf = Workflow(update_settings={'github_slug': GITHUB_SLUG})
+    wf = Workflow3(update_settings={'github_slug': GITHUB_SLUG})
     sys.exit(wf.run(main))
