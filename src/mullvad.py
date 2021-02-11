@@ -222,6 +222,15 @@ def filter_tunnel_protocols(query):
     return protocols
 
 
+def set_auto_connect():
+    for status in get_auto_connect():
+        wf.add_item(status,
+                    'Current auto-connect status.',
+                    arg='/usr/local/bin/mullvad auto-connect get',
+                    valid=True,
+                    icon='icons/chevron-right-dark.png')
+
+
 def set_lan():
     for status in get_lan():
         if status == 'Local network sharing setting: allow':
@@ -420,8 +429,9 @@ def main(wf):
         protocol_status()
         set_lan()
         check_connection()
+        set_auto_connect()
         for action in mullvad_actions.ACTIONS:
-            if action['name'] in ['relay', 'reconnect', 'auto-connect', 'account']:
+            if action['name'] in ['relay', 'reconnect', 'account']:
                 wf.add_item(action['name'], action['description'],
                             uid=action['name'],
                             autocomplete=action['autocomplete'],
@@ -445,12 +455,7 @@ def main(wf):
         set_lan()
 
     elif query and query.startswith('auto-connect'):
-        for status in get_auto_connect():
-            wf.add_item(status,
-                        'Current auto-connect status.',
-                        arg='/usr/local/bin/mullvad auto-connect get',
-                        valid=True,
-                        icon='icons/chevron-right-dark.png')
+        set_auto_connect()
 
     elif query and query.startswith('reconnect'):
         set_reconnect()
