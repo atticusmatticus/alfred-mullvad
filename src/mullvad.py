@@ -81,9 +81,8 @@ def get_version():
     None
 
     Returns:
-    List of strings -- [mullvad supported:"true/false", ]
+    List -- [mullvad supported:True/False, currentVersion='1234.5', latestVersion='6789.0']
     """
-    # TODO: simplify this return segment
     mullVersion = execute(['mullvad', 'version'])
     # print mullVersion
     supported = mullVersion.splitlines()[1].split()[2]
@@ -97,7 +96,7 @@ def get_version():
     latestVersion = mullVersion.splitlines()[3].split(':')[1].strip()
     # print latestVersion
     # print currentVersion==latestVersion
-    return [supported, currentVersion==latestVersion]
+    return [supported, currentVersion, latestVersion]
 
 
 def connection_status():
@@ -262,10 +261,12 @@ def unsupported_mullvad():
 
 
 def update_mullvad():
-    mullVersion = execute(['mullvad', 'version']).splitlines()[3].split()[2]
+    # TODO: Download with something that ships with macOS rather than brewed `wget` in /usr/local/bin/
+    latestVersion = wf.cached_data('mullvad_version', data_func=get_version, max_age=86400)[2]
+    # print(latestVersion)
     wf.add_item('Update mullvad',
                 subtitle='The currently installed version of Mullvad is out-of-date',
-                arg='/usr/local/bin/wget https://github.com/mullvad/mullvadvpn-app/releases/download/{}/MullvadVPN-{}.pkg -P ~/Downloads/ ; wait && open ~/Downloads/MullvadVPN-{}.pkg'.format(mullVersion,mullVersion,mullVersion),
+                arg='/usr/local/bin/wget https://github.com/mullvad/mullvadvpn-app/releases/download/{}/MullvadVPN-{}.pkg -P ~/Downloads/ ; wait && open ~/Downloads/MullvadVPN-{}.pkg'.format(latestVersion,latestVersion,latestVersion),
                 valid=True,
                 icon='icons/cloud-download-dark.png')
 
@@ -414,7 +415,9 @@ def main(wf):
     if not query: # starting screen of information.
         if wf.cached_data('mullvad_version',
                           get_version,
-                          max_age=86400)[1] == False:
+                          max_age=86400)[1] != wf.cached_data('mullvad_version',
+                                                              get_version,
+                                                              max_age=86400)[2]:
             update_mullvad()
         if wf.cached_data('mullvad_version',
                           get_version,
