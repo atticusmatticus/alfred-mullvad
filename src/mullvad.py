@@ -196,7 +196,7 @@ def get_protocol():
 
 
 def protocol_status():
-    status = get_connection()[0].split()[4]
+    status = get_protocol().split(':')[1].split()[0]
     wf.add_item('Tunnel-protocol: {}'.format(status),
                 subtitle='Change tunnel-protocol',
                 autocomplete='protocol',
@@ -402,7 +402,7 @@ def filter_relay_cities(wf, countryCode, query):
 #############################
 
 def main(wf):
-    #TODO update workflow option
+    # TODO: update workflow option
     if wf.update_available:
         wf.add_item('An update is available!',
                     autocomplete='workflow:update',
