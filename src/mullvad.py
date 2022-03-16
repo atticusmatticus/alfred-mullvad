@@ -1,4 +1,4 @@
-# python 2
+# python 3
 # encoding: utf-8
 
 import os
@@ -32,6 +32,7 @@ def execute(cmdList):
     cmd, err = subprocess.Popen(cmdList,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
+                                text=True, # output from commands is type `str` instead of `byte`
                                 env=newEnv).communicate() # .communicate() returns cmd and err as a tuple
     if err:
         return err
@@ -63,7 +64,7 @@ def get_lan():
 
 
 def get_kill_switch():
-    """ Get Mullvad Kill-Switch Status
+    """ Get Mullvad Always-require-vpn Status
 
     Arguments:
     None
@@ -90,7 +91,7 @@ def get_version():
         supported = True
     elif supported == 'false':
         supported = False
-    # print supported
+    # print('supported:', supported)
     currentVersion = mullVersion.splitlines()[0].split(':')[1].strip()
     # print currentVersion
     latestVersion = mullVersion.splitlines()[3].split(':')[1].strip()
@@ -114,7 +115,7 @@ def connection_status():
             countryString, cityString = get_country_city()
             # print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
             # print ' '.join(status.split()[4:])+'. Select to Disconnect.'
-            wf.add_item('{} to: {} {}'.format(stat, cityString, countryString).decode('utf8'),
+            wf.add_item('{} to: {} {}'.format(stat, cityString, countryString), #.decode('utf8'),
                         subtitle=' '.join(status.split()[4:])+'. Select to Disconnect. Type "relay" to change.',
                         arg='/usr/local/bin/mullvad disconnect',
                         valid=True,
@@ -171,7 +172,7 @@ def get_connection():
 
 
 def check_connection():
-    wf.add_item('check',
+    wf.add_item('Check',
                 subtitle='Check security of connection',
                 arg='open https://mullvad.net/en/check/',
                 valid=True,
@@ -184,7 +185,7 @@ def set_kill_switch():
             killStat = ['Enabled', 'off', 'green']
         elif status == 'Network traffic will be allowed when the VPN is disconnected':
             killStat = ['Disabled', 'on', 'red']
-        wf.add_item('Kill switch: ' + killStat[0],
+        wf.add_item('Always Require VPN: ' + killStat[0],
                     subtitle=status + '. Select to switch',
                     arg='/usr/local/bin/mullvad always-require-vpn set {}'.format(killStat[1]),
                     valid=True,
@@ -197,8 +198,8 @@ def get_protocol():
 
 def protocol_status():
     status = get_protocol().split(':')[1].split()[0]
-    wf.add_item('Tunnel-protocol: {}'.format(status),
-                subtitle='Change tunnel-protocol',
+    wf.add_item('Protocol: {}'.format(status),
+                subtitle='Change protocol',
                 autocomplete='protocol',
                 valid=False,
                 icon='icons/{}.png'.format(status.lower()))
@@ -240,7 +241,7 @@ def set_lan():
                     subtitle=status + '. Select to switch',
                     arg='/usr/local/bin/mullvad lan set {}'.format(lanStat[1]),
                     valid=True,
-                    icon='icons/lan_{}.png'.format(lanStat[2])) #TODO two monitors with connecting wires red and green
+                    icon='icons/lan_{}.png'.format(lanStat[2]))
 
 
 def set_reconnect():
@@ -273,6 +274,7 @@ def update_mullvad():
 
 def get_account():
     getAcct = execute(['mullvad', 'account', 'get']).splitlines()
+    # print('DEBUG:', type(getAcct[1].split()[3]), type('%Y-%m-%d'))
     deltaDays = (datetime.strptime(getAcct[1].split()[3], '%Y-%m-%d') - datetime.utcnow()).days
     return [getAcct[0].split()[2], deltaDays]
 
@@ -281,7 +283,7 @@ def add_time_account():
     formulas = wf.cached_data('mullvad_account',
                               get_account,
                               max_age=86400)
-    wf.add_item('Account: {} expires in: {} days'.format(formulas[0], formulas[1]),
+    wf.add_item('Account #: {} expires in: {} days'.format(formulas[0], formulas[1]),
                 subtitle='Open mullvad account website and copy account number to clipboard',
                 arg='echo {} | pbcopy && open https://mullvad.net/en/account/'.format(formulas[0]), # copy account number to clipboard and open mullvad account login screen
                 valid=True,
@@ -334,7 +336,7 @@ def get_country_list():
                               get_relay_list,
                               max_age=432000)
     for formula in formulas:
-        countries.append(formula[0].decode('utf8'))
+        countries.append(formula[0]) #.decode('utf8'))
     return countries
 
 
@@ -383,7 +385,7 @@ def get_city_list(wf, countryCode):
     index = [i for i, s in enumerate(countries) if countryCodeSearch in s][0]
     cities = []
     for city in relayList[index][1:]:
-        cities.append(city[0].decode('utf8'))
+        cities.append(city[0]) #.decode('utf8'))
     wf.cache_data('mullvad_cities_list', cities)
 
 
@@ -445,7 +447,7 @@ def main(wf):
     if query and query.startswith('check'):
         check_connection()
 
-    elif query and any(query.startswith(x) for x in ['kill-switch', 'block-when-disconnected']):
+    elif query and any(query.startswith(x) for x in ['always-require-vpn', 'block-when-disconnected']):
         set_kill_switch()
 
     elif query and query.startswith('relay'):
@@ -473,7 +475,7 @@ def main(wf):
         protocol_status()
 
     elif query:
-        #TODO change from actions dictionary to a filter function
+        # TODO change from actions dictionary to a filter function
         actions = mullvad_actions.ACTIONS
         # filter actions by query
         if query:
@@ -503,7 +505,7 @@ def main(wf):
     wf.send_feedback()
 
     # refresh cache
-    cmd = ['/usr/bin/python', wf.workflowfile('mullvad_refresh.py')]
+    cmd = ['/usr/bin/python3', wf.workflowfile('mullvad_refresh.py')]
     run_in_background('mullvad_refresh', cmd)
 #    run_in_background('cache_account', cache_account)
 
@@ -513,5 +515,5 @@ def main(wf):
 #############################
 
 if __name__ == '__main__':
-    wf = Workflow(update_settings={'github_slug': GITHUB_SLUG})
+    wf = Workflow() #update_settings={'github_slug': GITHUB_SLUG})
     sys.exit(wf.run(main))

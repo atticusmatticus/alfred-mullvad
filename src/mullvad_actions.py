@@ -1,8 +1,8 @@
 ACTIONS = [
     {
-        'name': 'block-when-disconnected',
-        'description': 'Kill-switch settings',
-        'autocomplete': 'block-when-disconnected ',
+        'name': 'always-require-vpn',
+        'description': 'Always-require-vpn settings',
+        'autocomplete': 'always-require-vpn ',
         'arg': '',
         'icon': 'icons/skull_green.png',
         'valid': False
@@ -45,6 +45,14 @@ ACTIONS = [
         'autocomplete': 'auto-connect ',
         'arg': '',
         'icon': 'icons/chevron-right-dark.png',
+        'valid': False
+    },
+    {
+        'name': 'protocol',
+        'description': 'Display and alter tunnel-protocol',
+        'autocomplete': 'protocol ',
+        'arg': '',
+        'icon': 'icons/any.png',
         'valid': False
     },
     {

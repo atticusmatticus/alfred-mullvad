@@ -19,10 +19,10 @@ up your Python script to best utilise the :class:`Workflow` object.
 
 """
 
-from __future__ import print_function, unicode_literals
+
 
 import binascii
-import cPickle
+from contextlib import contextmanager
 from copy import deepcopy
 import json
 import logging
@@ -36,6 +36,7 @@ import string
 import subprocess
 import sys
 import time
+from typing import Optional
 import unicodedata
 
 try:
@@ -44,12 +45,14 @@ except ImportError:  # pragma: no cover
     import xml.etree.ElementTree as ET
 
 # imported to maintain API
-from util import AcquisitionError  # noqa: F401
-from util import (
+from workflow.util import AcquisitionError  # noqa: F401
+from workflow.util import (
     atomic_writer,
     LockFile,
     uninterruptible,
 )
+
+assert sys.version_info[0] == 3
 
 #: Sentinel for properties that haven't been set yet (that might
 #: correctly have the value ``None``)
@@ -581,17 +584,40 @@ class SerializerManager(object):
         """Return names of registered serializers."""
         return sorted(self._serializers.keys())
 
+class BaseSerializer:
+    is_binary: Optional[bool] = None
 
-class JSONSerializer(object):
+    @classmethod
+    def binary_mode(cls):
+        return 'b' if cls.is_binary else ''
+
+    @classmethod
+    def _opener(cls, opener, path, mode='r'):
+        with opener(path, mode + cls.binary_mode()) as fp:
+            yield fp
+
+    @classmethod
+    @contextmanager
+    def atomic_writer(cls, path, mode):
+        yield from cls._opener(atomic_writer, path, mode)
+
+    @classmethod
+    @contextmanager
+    def open(cls, path, mode):
+        yield from cls._opener(open, path, mode)
+
+
+class JSONSerializer(BaseSerializer):
     """Wrapper around :mod:`json`. Sets ``indent`` and ``encoding``.
 
     .. versionadded:: 1.8
 
     Use this serializer if you need readable data files. JSON doesn't
-    support Python objects as well as ``cPickle``/``pickle``, so be
+    support Python objects as well as ``pickle``, so be
     careful which data you try to serialize as JSON.
 
     """
+    is_binary = False
 
     @classmethod
     def load(cls, file_obj):
@@ -619,49 +645,10 @@ class JSONSerializer(object):
         :type file_obj: ``file`` object
 
         """
-        return json.dump(obj, file_obj, indent=2, encoding='utf-8')
+        return json.dump(obj, file_obj, indent=2)
 
 
-class CPickleSerializer(object):
-    """Wrapper around :mod:`cPickle`. Sets ``protocol``.
-
-    .. versionadded:: 1.8
-
-    This is the default serializer and the best combination of speed and
-    flexibility.
-
-    """
-
-    @classmethod
-    def load(cls, file_obj):
-        """Load serialized object from open pickle file.
-
-        .. versionadded:: 1.8
-
-        :param file_obj: file handle
-        :type file_obj: ``file`` object
-        :returns: object loaded from pickle file
-        :rtype: object
-
-        """
-        return cPickle.load(file_obj)
-
-    @classmethod
-    def dump(cls, obj, file_obj):
-        """Serialize object ``obj`` to open pickle file.
-
-        .. versionadded:: 1.8
-
-        :param obj: Python object to serialize
-        :type obj: Python object
-        :param file_obj: file handle
-        :type file_obj: ``file`` object
-
-        """
-        return cPickle.dump(obj, file_obj, protocol=-1)
-
-
-class PickleSerializer(object):
+class PickleSerializer(BaseSerializer):
     """Wrapper around :mod:`pickle`. Sets ``protocol``.
 
     .. versionadded:: 1.8
@@ -669,6 +656,7 @@ class PickleSerializer(object):
     Use this serializer if you need to add custom pickling.
 
     """
+    is_binary = True
 
     @classmethod
     def load(cls, file_obj):
@@ -701,7 +689,6 @@ class PickleSerializer(object):
 
 # Set up default manager and register built-in serializers
 manager = SerializerManager()
-manager.register('cpickle', CPickleSerializer)
 manager.register('pickle', PickleSerializer)
 manager.register('json', JSONSerializer)
 
@@ -826,7 +813,7 @@ class Settings(dict):
         if os.path.exists(self._filepath):
             self._load()
         elif defaults:
-            for key, val in defaults.items():
+            for key, val in list(defaults.items()):
                 self[key] = val
             self.save()  # save default settings
 
@@ -834,7 +821,7 @@ class Settings(dict):
         """Load cached settings from JSON file `self._filepath`."""
         data = {}
         with LockFile(self._filepath, 0.5):
-            with open(self._filepath, 'rb') as fp:
+            with open(self._filepath, 'r') as fp:
                 data.update(json.load(fp))
 
         self._original = deepcopy(data)
@@ -858,9 +845,8 @@ class Settings(dict):
         data.update(self)
 
         with LockFile(self._filepath, 0.5):
-            with atomic_writer(self._filepath, 'wb') as fp:
-                json.dump(data, fp, sort_keys=True, indent=2,
-                          encoding='utf-8')
+            with atomic_writer(self._filepath, 'w') as fp:
+                json.dump(data, fp, sort_keys=True, indent=2)
 
     # dict methods
     def __setitem__(self, key, value):
@@ -941,6 +927,9 @@ class Workflow(object):
                  capture_args=True, libraries=None,
                  help_url=None):
         """Create new :class:`Workflow` object."""
+
+        seralizer = 'pickle'
+
         self._default_settings = default_settings or {}
         self._update_settings = update_settings or {}
         self._input_encoding = input_encoding
@@ -953,8 +942,8 @@ class Workflow(object):
         self._bundleid = None
         self._debugging = None
         self._name = None
-        self._cache_serializer = 'cpickle'
-        self._data_serializer = 'cpickle'
+        self._cache_serializer = seralizer
+        self._data_serializer = seralizer
         self._info = None
         self._info_loaded = False
         self._logger = None
@@ -996,7 +985,7 @@ class Workflow(object):
     @property
     def alfred_version(self):
         """Alfred version as :class:`~workflow.update.Version` object."""
-        from update import Version
+        from .update import Version
         return Version(self.alfred_env.get('version'))
 
     @property
@@ -1071,7 +1060,10 @@ class Workflow(object):
 
             if value:
                 if key in ('debug', 'version_build', 'theme_subtext'):
-                    value = int(value)
+                    if value.isdigit():
+                        value = int(value)
+                    else:
+                        value = False
                 else:
                     value = self.decode(value)
 
@@ -1100,7 +1092,7 @@ class Workflow(object):
             if self.alfred_env.get('workflow_bundleid'):
                 self._bundleid = self.alfred_env.get('workflow_bundleid')
             else:
-                self._bundleid = unicode(self.info['bundleid'], 'utf-8')
+                self._bundleid = self.info['bundleid']
 
         return self._bundleid
 
@@ -1112,7 +1104,10 @@ class Workflow(object):
         :rtype: ``bool``
 
         """
-        return self.alfred_env.get('debug') == 1
+        return bool(
+            self.alfred_env.get('debug') == 1
+            or os.environ.get('PYTEST_RUNNING')
+        )
 
     @property
     def name(self):
@@ -1163,7 +1158,7 @@ class Workflow(object):
                 filepath = self.workflowfile('version')
 
                 if os.path.exists(filepath):
-                    with open(filepath, 'rb') as fileobj:
+                    with open(filepath, 'r') as fileobj:
                         version = fileobj.read()
 
             # info.plist
@@ -1171,7 +1166,7 @@ class Workflow(object):
                 version = self.info.get('version')
 
             if version:
-                from update import Version
+                from .update import Version
                 version = Version(version)
 
             self._version = version
@@ -1299,7 +1294,7 @@ class Workflow(object):
             # the library is in. CWD will be the workflow root if
             # a workflow is being run in Alfred
             candidates = [
-                os.path.abspath(os.getcwdu()),
+                os.path.abspath(os.getcwd()),
                 os.path.dirname(os.path.abspath(os.path.dirname(__file__)))]
 
             # climb the directory tree until we find `info.plist`
@@ -1571,7 +1566,7 @@ class Workflow(object):
             self.logger.debug('no data stored for `%s`', name)
             return None
 
-        with open(metadata_path, 'rb') as file_obj:
+        with open(metadata_path, 'r') as file_obj:
             serializer_name = file_obj.read().strip()
 
         serializer = manager.serializer(serializer_name)
@@ -1653,15 +1648,18 @@ class Workflow(object):
         if data is None:  # Delete cached data
             delete_paths((metadata_path, data_path))
             return
+        
+        if isinstance(data, str):
+            data = bytearray(data)
 
         # Ensure write is not interrupted by SIGTERM
         @uninterruptible
         def _store():
             # Save file extension
-            with atomic_writer(metadata_path, 'wb') as file_obj:
+            with atomic_writer(metadata_path, 'w') as file_obj:
                 file_obj.write(serializer_name)
 
-            with atomic_writer(data_path, 'wb') as file_obj:
+            with serializer.atomic_writer(data_path, 'w') as file_obj:
                 serializer.dump(data, file_obj)
 
         _store()
@@ -1724,7 +1722,7 @@ class Workflow(object):
                 self.logger.debug('deleted cache file: %s', cache_path)
             return
 
-        with atomic_writer(cache_path, 'wb') as file_obj:
+        with serializer.atomic_writer(cache_path, 'w') as file_obj:
             serializer.dump(data, file_obj)
 
         self.logger.debug('cached data: %s', cache_path)
@@ -1942,6 +1940,7 @@ class Workflow(object):
             return (0, None)
 
         # item starts with query
+        # print(match_on & MATCH_STARTSWITH, value.lower().startswith(query), value.lower(), query)
         if match_on & MATCH_STARTSWITH and value.lower().startswith(query):
             score = 100.0 - (len(value) / len(query))
 
@@ -2083,7 +2082,7 @@ class Workflow(object):
 
             if not sys.stdout.isatty():  # Show error in Alfred
                 if text_errors:
-                    print(unicode(err).encode('utf-8'), end='')
+                    print(str(err).encode('utf-8'), end='')
                 else:
                     self._items = []
                     if self._name:
@@ -2093,7 +2092,7 @@ class Workflow(object):
                     else:  # pragma: no cover
                         name = os.path.dirname(__file__)
                     self.add_item("Error in workflow '%s'" % name,
-                                  unicode(err),
+                                  str(err),
                                   icon=ICON_ERROR)
                     self.send_feedback()
             return 1
@@ -2179,7 +2178,7 @@ class Workflow(object):
         for item in self._items:
             root.append(item.elem)
         sys.stdout.write('<?xml version="1.0" encoding="utf-8"?>\n')
-        sys.stdout.write(ET.tostring(root).encode('utf-8'))
+        sys.stdout.write(ET.tostring(root, encoding='unicode'))
         sys.stdout.flush()
 
     ####################################################################
@@ -2217,7 +2216,7 @@ class Workflow(object):
 
             version = self.settings.get('__workflow_last_version')
             if version:
-                from update import Version
+                from .update import Version
                 version = Version(version)
 
             self._last_version_run = version
@@ -2245,8 +2244,8 @@ class Workflow(object):
 
             version = self.version
 
-        if isinstance(version, basestring):
-            from update import Version
+        if isinstance(version, str):
+            from .update import Version
             version = Version(version)
 
         self.settings['__workflow_last_version'] = str(version)
@@ -2319,19 +2318,16 @@ class Workflow(object):
 
         # Check for new version if it's time
         if (force or not self.cached_data_fresh(key, frequency * 86400)):
-
             repo = self._update_settings['github_slug']
             # version = self._update_settings['version']
             version = str(self.version)
 
-            from background import run_in_background
+            from .background import run_in_background
 
             # update.py is adjacent to this file
-            update_script = os.path.join(os.path.dirname(__file__),
-                                         b'update.py')
+            update_script = os.path.join(os.path.dirname(__file__), 'update.py')
 
-            cmd = ['/usr/bin/python', update_script, 'check', repo, version]
-
+            cmd = [sys.executable, update_script, 'check', repo, version]
             if self.prereleases:
                 cmd.append('--prereleases')
 
@@ -2354,7 +2350,7 @@ class Workflow(object):
             installed, else ``False``
 
         """
-        import update
+        from . import update
 
         repo = self._update_settings['github_slug']
         # version = self._update_settings['version']
@@ -2363,13 +2359,12 @@ class Workflow(object):
         if not update.check_update(repo, version, self.prereleases):
             return False
 
-        from background import run_in_background
+        from .background import run_in_background
 
         # update.py is adjacent to this file
-        update_script = os.path.join(os.path.dirname(__file__),
-                                     b'update.py')
+        update_script = os.path.join(os.path.dirname(__file__), 'update.py')
 
-        cmd = ['/usr/bin/python', update_script, 'install', repo, version]
+        cmd = [sys.executable, update_script, 'install', repo, version]
 
         if self.prereleases:
             cmd.append('--prereleases')
@@ -2456,7 +2451,7 @@ class Workflow(object):
             h = groups.get('hex')
             password = groups.get('pw')
             if h:
-                password = unicode(binascii.unhexlify(h), 'utf-8')
+                password = str(binascii.unhexlify(h), 'utf-8')
 
         self.logger.debug('got password : %s:%s', service, account)
 
@@ -2697,8 +2692,8 @@ class Workflow(object):
         """
         encoding = encoding or self._input_encoding
         normalization = normalization or self._normalizsation
-        if not isinstance(text, unicode):
-            text = unicode(text, encoding)
+        if not isinstance(text, str):
+            text = str(text, encoding)
         return unicodedata.normalize(normalization, text)
 
     def fold_to_ascii(self, text):
@@ -2717,8 +2712,7 @@ class Workflow(object):
         if isascii(text):
             return text
         text = ''.join([ASCII_REPLACEMENTS.get(c, c) for c in text])
-        return unicode(unicodedata.normalize('NFKD',
-                       text).encode('ascii', 'ignore'))
+        return unicodedata.normalize('NFKD', text)
 
     def dumbify_punctuation(self, text):
         """Convert non-ASCII punctuation to closest ASCII equivalent.
@@ -2765,7 +2759,8 @@ class Workflow(object):
     def _load_info_plist(self):
         """Load workflow info from ``info.plist``."""
         # info.plist should be in the directory above this one
-        self._info = plistlib.readPlist(self.workflowfile('info.plist'))
+        with open(self.workflowfile('info.plist'), 'rb') as file_obj:
+            self._info = plistlib.load(file_obj)
         self._info_loaded = True
 
     def _create(self, dirpath):
