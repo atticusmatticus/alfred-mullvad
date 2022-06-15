@@ -108,13 +108,13 @@ def connection_status():
     Item -- Connected/Disconnected/Blocked
     """
     for status in get_connection():
-        # print 'status:', status
-        stat = str(status.split()[2])
-        # print 'stat:', stat
+        # print('DEBUG:', 'status:', status)
+        stat = str(status.split()[0])
+        # print('DEBUG:', 'stat:', stat)
         if stat == 'Connected':
             countryString, cityString = get_country_city()
-            # print '{} to: {} {}'.format(stat, cityString, countryString).decode('utf8')
-            # print ' '.join(status.split()[4:])+'. Select to Disconnect.'
+            # print('DEBUG:', '{} to: {} {}'.format(stat, cityString, countryString))#.decode('utf8'))
+            # print('DEBUG:', ' '.join(status.split()[4:])+'. Select to Disconnect.')
             wf.add_item('{} to: {} {}'.format(stat, cityString, countryString), #.decode('utf8'),
                         subtitle=' '.join(status.split()[4:])+'. Select to Disconnect. Type "relay" to change.',
                         arg='/usr/local/bin/mullvad disconnect',
@@ -274,8 +274,9 @@ def update_mullvad():
 
 def get_account():
     getAcct = execute(['mullvad', 'account', 'get']).splitlines()
-    # print('DEBUG:', type(getAcct[1].split()[3]), type('%Y-%m-%d'))
-    deltaDays = (datetime.strptime(getAcct[1].split()[3], '%Y-%m-%d') - datetime.utcnow()).days
+    # print('DEBUG:', getAcct[2].split()[3])
+    # print('DEBUG:', type(getAcct[2].split()[3]), type('%Y-%m-%d'))
+    deltaDays = (datetime.strptime(getAcct[2].split()[3], '%Y-%m-%d') - datetime.utcnow()).days
     return [getAcct[0].split()[2], deltaDays]
 
 
